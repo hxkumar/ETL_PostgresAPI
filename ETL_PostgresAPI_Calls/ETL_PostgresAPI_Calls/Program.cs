@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using RestSharp;
 using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -64,6 +65,8 @@ namespace ETL_PostgresAPI_Calls
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
+                //For making calls through SSIS
+                //Dts.TaskResult = (int)ScriptResults.Failure;
             }
             return accessToken;
         }
@@ -72,7 +75,7 @@ namespace ETL_PostgresAPI_Calls
             try
             {
                 string sourceUrl = "APIRequestURL";
-                //string sourceUrl = Dts.Variables["User::SourceURL"].Value.ToString();
+                //string sourceUrl = Dts.Variables["User::SourceURL"].Value.ToString();     // For SSIS 
                 HttpClient client = new HttpClient();
                 client.BaseAddress = new Uri(sourceUrl);
                 // Add an Accept header for JSON format.  
@@ -92,12 +95,12 @@ namespace ETL_PostgresAPI_Calls
 
                     switch (tableInfo.Key)
                     {
-                        case "PurchaseOrderUpdateStatus":
-                            //List<PurchaseOrderUpdateStatus> PurchaseOrderUpdateStatuss = objects.Select(x => JsonConvert.DeserializeObject<PurchaseOrderUpdateStatus>(x.ToString())).ToList();
-                            //addRecordsPurchaseOrderUpdateStatus(PurchaseOrderUpdateStatuss);
+                        case "PurchaseOrderUpdate":
+                            List<PurchaseOrderUpdate> PurchaseOrderUpdates = objects.Select(x => JsonConvert.DeserializeObject<PurchaseOrderUpdate>(x.ToString())).ToList();
+                            addRecordsPurchaseOrderUpdate(PurchaseOrderUpdates);
                             break;
                         case "PurchaseOrder":
-                            //List<PurchaseOrder> PurchaseOrders = objects.Select(x => JsonConvert.DeserializeObject<PurchaseOrder>(x.ToString())).ToList();
+                            List<PurchaseOrder> PurchaseOrders = objects.Select(x => JsonConvert.DeserializeObject<PurchaseOrder>(x.ToString())).ToList();
                             //addRecordsPurchaseOrder(PurchaseOrders);
                             break;
                     }
@@ -106,8 +109,92 @@ namespace ETL_PostgresAPI_Calls
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
+                //For making calls through SSIS
+                //Dts.TaskResult = (int)ScriptResults.Failure;
             }
             //Dts.TaskResult = (int)ScriptResults.Success;
         }
+
+        public class PurchaseOrderUpdate
+        {
+            public int purchaseorderupdatestatus_id { get; set; }
+            public string statustype { get; set; }
+            public string statustext { get; set; }
+        }
+
+        public class PurchaseOrder
+        {
+            public int purchaseorder_id { get; set; }
+            public string originalpurchaseorderkey { get; set; }
+           
+        }
+
+        public static void addRecordsPurchaseOrderUpdate(List<PurchaseOrderUpdate> Data)
+        {
+            string connetionString = null;
+            string sql = null;
+            //string reportDB = Dts.Variables["User::ReportDB"].Value.ToString();
+            //string reportServer = Dts.Variables["User::ReportServer"].Value.ToString();
+
+            //connetionString = @"Server= {reportServer}; Database= {reportDB}; Integrated Security=SSPI;";
+            string reportServer = "reportServerName";
+            string reportDB = "reportDBInstanceName";
+            connetionString = String.Format("Server= {0}; Database= {1}; Integrated Security=SSPI;", reportServer, reportDB);
+            using (SqlConnection cnn = new SqlConnection(connetionString))
+            {
+                sql = "insert into Staging.PurchaseOrderUpdate([purchaseorderupdatestatus_id],[statustype],[statustext]) values(@purchaseorderupdatestatus_id,@statustype, @statustext)";
+                cnn.Open();
+                foreach (var data in Data)
+                {
+                    using (SqlCommand cmd = new SqlCommand(sql, cnn))
+                    {
+
+                        cmd.Parameters.AddWithValue("@purchaseorderupdatestatus_id", data.purchaseorderupdatestatus_id);
+                        cmd.Parameters.AddWithValue("@statustype", DBNull.Value);
+                        cmd.Parameters.AddWithValue("@statustext", data.statustext);
+                        cmd.ExecuteNonQuery();
+
+                    }
+                }
+            }
+        }
+        public static void addRecordsPurchaseOrder(List<PurchaseOrder> Data)
+        {
+            string connetionString = null;
+            string sql = null;
+            string reportServer = "reportServerName";
+            string reportDB = "reportDBInstanceName";
+            //string reportDB = Dts.Variables["User::ReportDB"].Value.ToString();
+            //string reportServer = Dts.Variables["User::ReportServer"].Value.ToString();
+
+            //connetionString = @"Server= {reportServer}; Database= {reportDB}; Integrated Security=SSPI;";
+            connetionString = String.Format("Server= {0}; Database= {1}; Integrated Security=SSPI;", reportServer, reportDB);
+            using (SqlConnection cnn = new SqlConnection(connetionString))
+            {
+                sql = "insert into Staging.PurchaseOrder ([purchaseorder_id],[originalpurchaseorderkey]) values(@purchaseorder_id,@originalpurchaseorderkey)";
+                cnn.Open();
+                foreach (var data in Data)
+                {
+                    using (SqlCommand cmd = new SqlCommand(sql, cnn))
+                    {
+
+                        cmd.Parameters.AddWithValue("@purchaseorderid", data.purchaseorder_id);
+                       
+                        if (string.IsNullOrEmpty(data.originalpurchaseorderkey))
+                        {
+                            cmd.Parameters.AddWithValue("@originalpurchaseorderkey", DBNull.Value);
+
+                        }
+                        else
+                        {
+                            cmd.Parameters.AddWithValue("@originalpurchaseorderkey", data.originalpurchaseorderkey);
+
+                        }
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+        }
+
     }
 }
